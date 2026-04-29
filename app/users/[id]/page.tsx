@@ -1,0 +1,286 @@
+import { redirect, notFound } from 'next/navigation';
+import Link from 'next/link';
+import { getCurrentUser, getUserWithProfile } from '@/lib/db/queries';
+import { generateEmailFromStudentId } from '@/lib/utils/email';
+
+// 强制动态渲染
+export const dynamic = 'force-dynamic';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { 
+  ArrowLeft,
+  Heart,
+  GraduationCap,
+  MapPin,
+  Clock,
+  Brain,
+  Home,
+  User,
+  Mail,
+  IdCard,
+  Sun,
+  Moon,
+  Sparkles,
+  Coffee
+} from 'lucide-react';
+
+interface UserDetailsPageProps {
+  params: Promise<{ id: string }>;
+}
+
+const mbtiDescriptions: { [key: string]: string } = {
+  'INTJ': '建筑师', 'INTP': '逻辑学家', 'ENTJ': '指挥官', 'ENTP': '辩论家',
+  'INFJ': '提倡者', 'INFP': '调停者', 'ENFJ': '主人公', 'ENFP': '竞选者',
+  'ISTJ': '物流师', 'ISFJ': '守护者', 'ESTJ': '总经理', 'ESFJ': '执政官',
+  'ISTP': '鉴赏家', 'ISFP': '探险家', 'ESTP': '企业家', 'ESFP': '娱乐家'
+};
+
+const studyHabitLabels: { [key: string]: { label: string; icon: any } } = {
+  library: { label: '常在图书馆', icon: GraduationCap },
+  dormitory: { label: '常在寝室', icon: Home },
+  flexible: { label: '灵活', icon: Coffee }
+};
+
+const lifestyleLabels: { [key: string]: string } = {
+  'quiet': '安静型',
+  'social': '社交型',
+  'balanced': '平衡型'
+};
+
+const cleanlinessLabels: { [key: string]: string } = {
+  'extremely_clean': '极爱干净',
+  'regularly_tidy': '定期收拾',
+  'acceptable': '过得去就行'
+};
+
+const genderLabels: { [key: string]: string } = {
+  'male': '男',
+  'female': '女',
+  'other': '其他'
+};
+
+export default async function UserDetailsPage({ params }: UserDetailsPageProps) {
+  const { user: currentUser } = await getCurrentUser();
+  
+  if (!currentUser) {
+    redirect('/sign-in');
+  }
+
+  const { id } = await params;
+  const userId = parseInt(id);
+  
+  if (isNaN(userId)) {
+    notFound();
+  }
+
+  const targetUser = await getUserWithProfile(userId);
+  
+  if (!targetUser) {
+    notFound();
+  }
+
+  const profile = targetUser.user_profiles;
+  const user = targetUser.users;
+
+  const StudyHabitIcon = profile?.studyHabit ? studyHabitLabels[profile.studyHabit]?.icon || Coffee : Coffee;
+
+  return (
+    <div className="min-h-screen bg-transparent">
+      <div className="max-w-4xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        {/* 返回按钮 */}
+        <div className="mb-6">
+          <Button variant="outline" asChild>
+            <Link href="/explore" className="inline-flex items-center">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              返回匹配广场
+            </Link>
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* 左侧：用户基本信息 */}
+          <div className="lg:col-span-1">
+            <Card>
+              <CardContent className="p-6 text-center">
+                <div className="relative mb-4">
+                  <Avatar className="w-24 h-24 mx-auto ring-4 ring-pink-100 dark:ring-pink-900">
+                    <AvatarImage src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || generateEmailFromStudentId(user.studentId))}&background=f97316&color=fff&size=200`} />
+                    <AvatarFallback className="bg-gradient-to-br from-pink-400 to-purple-500 text-white text-xl">
+                      {user.name ? user.name.substring(0, 2) : generateEmailFromStudentId(user.studentId).substring(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full border-2 border-white dark:border-gray-800"></div>
+                </div>
+
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+                  {user.name || '用户' + user.id}
+                </h1>
+
+                {/* 基本信息 */}
+                <div className="space-y-3 text-sm">
+                  {profile?.gender && (
+                    <div className="flex items-center justify-center text-gray-600 dark:text-gray-300">
+                      <User className="w-4 h-4 mr-2" />
+                      <span>{genderLabels[profile.gender]}</span>
+                    </div>
+                  )}
+                  
+                  {profile?.age && (
+                    <div className="flex items-center justify-center text-gray-600 dark:text-gray-300">
+                      <span>{profile.age}岁</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-center text-gray-600 dark:text-gray-300">
+                    <Mail className="w-4 h-4 mr-2" />
+                    <span>{generateEmailFromStudentId(user.studentId).replace(/(.{2}).*(@.*)/, '$1***$2')}</span>
+                  </div>
+
+                  <div className="flex items-center justify-center text-gray-600 dark:text-gray-300">
+                    <IdCard className="w-4 h-4 mr-2" />
+                    <span>{user.studentId.replace(/(.{3}).*(.{2})/, '$1***$2')}</span>
+                  </div>
+                </div>
+
+                {/* 操作按钮 */}
+                <div className="mt-6 space-y-3">
+                  <Button className="w-full bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600">
+                    <Heart className="w-4 h-4 mr-2" />
+                    邀请Ta
+                  </Button>
+              
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* 右侧：详细信息 */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* 生活习惯 */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Home className="w-5 h-5 mr-2" />
+                  生活习惯
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap gap-3">
+                  {profile?.mbti && (
+                    <Badge variant="outline" className="text-sm">
+                      <Brain className="w-4 h-4 mr-1" />
+                      {profile.mbti} {mbtiDescriptions[profile.mbti]}
+                    </Badge>
+                  )}
+                  
+                  {profile?.studyHabit && (
+                    <Badge variant="outline" className="text-sm">
+                      <StudyHabitIcon className="w-4 h-4 mr-1" />
+                      {studyHabitLabels[profile.studyHabit]?.label}
+                    </Badge>
+                  )}
+                  
+                  {profile?.lifestyle && (
+                    <Badge variant="outline" className="text-sm">
+                      <Home className="w-4 h-4 mr-1" />
+                      {lifestyleLabels[profile.lifestyle]}
+                    </Badge>
+                  )}
+                  
+                  {profile?.cleanliness && (
+                    <Badge variant="outline" className="text-sm">
+                      <Sparkles className="w-4 h-4 mr-1" />
+                      {cleanlinessLabels[profile.cleanliness]}
+                    </Badge>
+                  )}
+                </div>
+
+                {(profile?.sleepTime || profile?.wakeTime) && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center">
+                      <Clock className="w-4 h-4 mr-1" />
+                      作息时间
+                    </label>
+                    <p className="text-gray-900 dark:text-white">
+                      {profile.sleepTime || '未填写'} - {profile.wakeTime || '未填写'}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* 个人简介 */}
+            {profile?.bio && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <User className="w-5 h-5 mr-2" />
+                    个人简介
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                    {profile.bio}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* 兴趣爱好 */}
+            {profile?.hobbies && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <Sparkles className="w-5 h-5 mr-2" />
+                    兴趣爱好
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-gray-700 dark:text-gray-300">
+                    {profile.hobbies}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* 室友期望 */}
+            {profile?.roommateExpectations && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <Heart className="w-5 h-5 mr-2" />
+                    室友期望
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                    {profile.roommateExpectations}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* 不可接受的行为 */}
+            {profile?.dealBreakers && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <span className="text-red-500">⚠️</span>
+                    <span className="ml-2">不可接受的行为</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                    {profile.dealBreakers}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

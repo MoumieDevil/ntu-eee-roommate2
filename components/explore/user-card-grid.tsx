@@ -1,0 +1,175 @@
+import { getUsersForMatching, getUserTeam } from '@/lib/db/queries';
+import { db } from '@/lib/db/drizzle';
+import { teamJoinRequests } from '@/lib/db/schema';
+import { and, eq } from 'drizzle-orm';
+import { UserCard } from '@/components/explore/user-card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { 
+  Users,
+  RefreshCw,
+  Search
+} from 'lucide-react';
+
+interface UserCardGridProps {
+  currentUserId?: number;
+  limit?: number;
+  searchParams?: {
+    search?: string;
+    minAge?: string;
+    maxAge?: string;
+    sleepTime?: string;
+    studyHabit?: string;
+    lifestyle?: string;
+    cleanliness?: string;
+    mbti?: string;
+  };
+}
+
+export async function UserCardGrid({ currentUserId, limit = 12, searchParams }: UserCardGridProps) {
+  if (!currentUserId) {
+    return (
+      <Alert>
+        <Search className="h-4 w-4" style={{ fill: 'none', stroke: 'currentColor' }} />
+        <AlertDescription>
+          请先登录以查看匹配的用户
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  try {
+    // 构建筛选条件（移除gender筛选）
+    const filters = {
+      search: searchParams?.search,
+      minAge: searchParams?.minAge ? parseInt(searchParams.minAge) : undefined,
+      maxAge: searchParams?.maxAge ? parseInt(searchParams.maxAge) : undefined,
+      sleepTime: searchParams?.sleepTime,
+      studyHabit: searchParams?.studyHabit ? searchParams.studyHabit.split(',').filter(Boolean) : [],
+      lifestyle: searchParams?.lifestyle ? searchParams.lifestyle.split(',').filter(Boolean) : [],
+      cleanliness: searchParams?.cleanliness ? searchParams.cleanliness.split(',').filter(Boolean) : [],
+      mbti: searchParams?.mbti ? searchParams.mbti.split(',').filter(Boolean) : []
+    };
+    
+    // 获取用户列表、当前用户的队伍信息，以及当前用户发送的待处理邀请
+    const [users, currentUserTeam, pendingInvites] = await Promise.all([
+      getUsersForMatching(currentUserId, limit, filters),
+      getUserTeam(currentUserId),
+      db
+        .select({ userId: teamJoinRequests.userId })
+        .from(teamJoinRequests)
+        .where(and(
+          eq(teamJoinRequests.invitedBy, currentUserId),
+          eq(teamJoinRequests.requestType, 'invitation'),
+          eq(teamJoinRequests.status, 'pending')
+        ))
+    ]);
+
+    const invitedUserSet = new Set<number>(pendingInvites.map((r) => r.userId));
+
+    if (users.length === 0) {
+      const hasFilters = searchParams && Object.values(searchParams).some(value => value && value !== 'all');
+      
+      return (
+        <div className="text-center py-12">
+          <div className="flex flex-col items-center space-y-4">
+            <div className="w-24 h-24 bg-gradient-to-br from-pink-100 to-purple-100 dark:from-gray-800 dark:to-gray-700 rounded-full flex items-center justify-center">
+              {hasFilters ? (
+                <Search className="w-8 h-8 text-gray-400" style={{ fill: 'none', stroke: 'currentColor' }} />
+              ) : (
+                <Users className="w-8 h-8 text-gray-400" style={{ fill: 'none', stroke: 'currentColor' }} />
+              )}
+            </div>
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                {hasFilters ? '无符合条件的用户' : '暂无可匹配的用户'}
+              </h3>
+              <p className="text-gray-500 dark:text-gray-400 mb-4">
+                {hasFilters ? (
+                  <>
+                    尝试以下方式：<br />
+                    • 放宽筛选条件范围<br />
+                    • 清空部分筛选条件<br />
+                    • 修改关键词搜索
+                  </>
+                ) : (
+                  <>
+                    可能的原因：<br />
+                    • 所有用户都已互动过<br />
+                    • 暂时没有符合条件的活跃用户
+                  </>
+                )}
+              </p>
+              <div className="flex space-x-3 justify-center">
+                <Button variant="outline" size="sm" asChild>
+                  <a href="/explore" className="inline-flex items-center">
+                    <RefreshCw className="w-4 h-4 mr-2" style={{ fill: 'none', stroke: 'currentColor' }} />
+                    刷新页面
+                  </a>
+                </Button>
+                {hasFilters && (
+                  <Button variant="outline" size="sm" asChild>
+                    <a href="/explore" className="inline-flex items-center">
+                      清空筛选
+                    </a>
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        {/* 结果统计 */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
+            <Users className="w-4 h-4" style={{ fill: 'none', stroke: 'currentColor' }} />
+            <span>找到 {users.length} 位匹配的用户</span>
+          </div>
+          <Button variant="ghost" size="sm" asChild>
+            <a href="/explore" className="inline-flex items-center">
+              <RefreshCw className="w-4 h-4 mr-2" style={{ fill: 'none', stroke: 'currentColor' }} />
+              刷新
+            </a>
+          </Button>
+        </div>
+
+        {/* 用户卡片网格 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          {users.map(({ user, profile }) => (
+            <UserCard
+              key={user.id}
+              user={user}
+              profile={profile}
+              currentUserId={currentUserId}
+              currentUserTeam={currentUserTeam}
+              alreadyInvited={invitedUserSet.has(user.id)}
+            />
+          ))}
+        </div>
+
+        {/* 加载更多 */}
+        {users.length >= limit && (
+          <div className="text-center pt-6">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              显示了前 {limit} 位用户，请使用筛选条件缩小范围
+            </p>
+          </div>
+        )}
+      </div>
+    );
+
+  } catch (error) {
+    console.error('获取匹配用户时出错:', error);
+    return (
+      <Alert className="border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20">
+        <AlertDescription className="text-red-800 dark:text-red-200">
+          加载用户数据时出现错误，请刷新页面重试
+        </AlertDescription>
+      </Alert>
+    );
+  }
+}
